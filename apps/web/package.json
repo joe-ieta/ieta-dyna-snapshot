@@ -1,0 +1,27 @@
+{
+  "name": "@ieta-dyna-snapshot/web",
+  "version": "0.1.0",
+  "description": "Vue management console for the web snapshot capture application",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4311",
+    "build": "vue-tsc --noEmit && vite build",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "@ieta-dyna-snapshot/shared": "workspace:*",
+    "axios": "^1.6.8",
+    "element-plus": "^2.7.8",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.5",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "vue-tsc": "^2.0.19"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "ieta-dyna-snapshot",
+  "version": "0.1.0",
+  "description": "Local web snapshot and structured data capture system",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @ieta-dyna-snapshot/api --filter @ieta-dyna-snapshot/web dev",
+    "dev:api": "pnpm --filter @ieta-dyna-snapshot/api dev",
+    "dev:web": "pnpm --filter @ieta-dyna-snapshot/web dev",
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=8"
+  }
+}

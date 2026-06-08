@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "jsx": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@ieta-dyna-snapshot/shared": ["../../packages/shared/src"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}
