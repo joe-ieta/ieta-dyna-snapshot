@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -12,7 +12,7 @@ const defaultReleaseRoot = resolve(repoRoot, "..", "ieta-dyna-snapshot-release")
 const args = parseArgs(process.argv.slice(2));
 const releaseRoot = resolve(args.releaseDir || defaultReleaseRoot);
 const portableOnly = args.portableOnly;
-const copyNodeModules = !portableOnly && args.copyNodeModules;
+const installNodeModules = !portableOnly && args.installNodeModules;
 const copyNodeRuntime = !portableOnly && args.copyNodeRuntime;
 const copyBrowserCache = !portableOnly && args.copyBrowserCache;
 
@@ -32,8 +32,8 @@ await writeDocumentation();
 await writeManifest();
 
 const warnings = [];
-if (copyNodeModules) {
-  await copyOptional(join(repoRoot, "node_modules"), join(releaseRoot, "node_modules"), warnings, "node_modules");
+if (installNodeModules) {
+  await installReleaseNodeModules(warnings);
 }
 if (copyNodeRuntime) {
   const nodeRoot = detectNodeRuntimeRoot();
@@ -65,7 +65,7 @@ function parseArgs(argv) {
     releaseDir: undefined,
     skipBuild: false,
     portableOnly: false,
-    copyNodeModules: true,
+    installNodeModules: true,
     copyNodeRuntime: true,
     copyBrowserCache: true,
   };
@@ -83,7 +83,7 @@ function parseArgs(argv) {
         result.portableOnly = true;
         break;
       case "--no-node-modules":
-        result.copyNodeModules = false;
+        result.installNodeModules = false;
         break;
       case "--no-node-runtime":
         result.copyNodeRuntime = false;
@@ -109,8 +109,8 @@ function printHelpAndExit() {
 Options:
   --release-dir <path>    发布目录，默认 ../ieta-dyna-snapshot-release
   --skip-build            跳过 pnpm type-check 和 pnpm build
-  --portable-only         只生成跨平台发布骨架，不复制当前平台 node_modules/Node/浏览器缓存
-  --no-node-modules       不复制当前 node_modules
+  --portable-only         只生成跨平台发布骨架，不重建 node_modules，也不复制当前平台 Node/浏览器缓存
+  --no-node-modules       不在发布目录内重建当前平台生产 node_modules
   --no-node-runtime       不复制当前 Node 运行时
   --no-browser-cache      不复制当前 Playwright 浏览器缓存
 `);
@@ -202,7 +202,7 @@ async function writeManifest() {
     sourceCommit: git(["rev-parse", "--short", "HEAD"]),
     releaseRoot,
     portableOnly,
-    includesCurrentNodeModules: copyNodeModules,
+    includesCurrentNodeModules: installNodeModules,
     includesCurrentNodeRuntime: copyNodeRuntime,
     includesCurrentPlaywrightCache: copyBrowserCache,
     supportedTargets: ["Windows x64", "Linux ARM64"],
@@ -231,6 +231,35 @@ async function copyOptional(source, target, warnings, label) {
   } catch (error) {
     warnings.push(`复制 ${label} 失败：${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function installReleaseNodeModules(warnings) {
+  const sourceStore = detectPnpmStoreDir();
+  if (sourceStore && existsSync(sourceStore)) {
+    await copyOptional(sourceStore, join(releaseRoot, ".pnpm-store", basename(sourceStore)), warnings, `pnpm store ${sourceStore}`);
+  } else {
+    warnings.push("未能识别当前 pnpm store；将尝试直接安装发布目录生产依赖。");
+  }
+
+  const releaseStore = sourceStore ? join(releaseRoot, ".pnpm-store", basename(sourceStore)) : undefined;
+  const installArgs = ["install", "--prod", "--frozen-lockfile"];
+  if (releaseStore && existsSync(releaseStore)) installArgs.push("--offline");
+
+  try {
+    run("pnpm", installArgs, releaseRoot);
+  } catch (error) {
+    warnings.push(`发布目录生产依赖安装失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function detectPnpmStoreDir() {
+  const modulesFile = join(repoRoot, "node_modules", ".modules.yaml");
+  if (!existsSync(modulesFile)) return undefined;
+  const content = readFileSync(modulesFile, "utf8");
+  const match = content.match(/storeDir:\s*"?([^"\r\n]+)"?/);
+  if (!match) return undefined;
+  const raw = match[1].trim();
+  return process.platform === "win32" ? raw.replace(/\\\\/g, "\\") : raw;
 }
 
 function detectNodeRuntimeRoot() {
