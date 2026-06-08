@@ -44,6 +44,7 @@ Read the documents in this order:
 5. [Project Review and Development Recommendations](docs/project-review-and-development-recommendations.md)
 6. [Development Workflow](docs/development-workflow.md)
 7. [External API Guide](docs/external-api-guide.md)
+8. [Open Items](docs/open-items.md)
 
 ## Application Framework
 
