@@ -1,6 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity("capture_plans")
+@Index(["projectId", "code"], { unique: true })
 export class CapturePlanEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
+import { TriggerCaptureRunDto } from "./dto/capture-run.dto";
 import { SnapshotService } from "./snapshot.service";
 
 @Controller("v1/capture-runs")
@@ -14,11 +15,19 @@ export class CaptureRunsController {
 
   @Post()
   @RequirePermissions("snapshot:run:execute")
-  trigger(@Body() payload: any) {
-    return this.service.triggerRun(
-      payload.projectCode,
-      payload.planCodes || [],
-      payload.parameters || {},
-    );
+  trigger(@Body() payload: TriggerCaptureRunDto) {
+    return this.service.triggerRun(payload);
+  }
+
+  @Get(":id")
+  @RequirePermissions("snapshot:run:execute")
+  detail(@Param("id") id: string) {
+    return this.service.getRun(id);
+  }
+
+  @Get(":id/steps")
+  @RequirePermissions("snapshot:run:execute")
+  steps(@Param("id") id: string) {
+    return this.service.listRunSteps(id);
   }
 }

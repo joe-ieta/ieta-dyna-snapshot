@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dyna Snapshot Release"
+  short_description: "Build and verify the ieta-dyna-snapshot runtime release folder."
+  default_prompt: "Build or refresh the ieta-dyna-snapshot release package using the project release scripts."

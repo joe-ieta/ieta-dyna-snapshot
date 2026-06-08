@@ -162,7 +162,7 @@ const toggleSidebar = () => {
 
 const refreshData = async () => {
   await appStore.refreshData();
-  ElMessage.success("已刷新系统状态");
+  ElMessage.success("系统状态已刷新");
 };
 
 const showHealth = () => {

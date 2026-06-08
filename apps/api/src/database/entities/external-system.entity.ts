@@ -1,6 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity("external_systems")
+@Index(["projectId", "code"], { unique: true })
 export class ExternalSystemEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

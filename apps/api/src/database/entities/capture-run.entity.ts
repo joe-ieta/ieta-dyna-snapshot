@@ -14,11 +14,23 @@ export class CaptureRunEntity {
   @Column({ type: "simple-json", default: "[]" })
   requestedPlanIds!: string[];
 
+  @Column({ type: "simple-json", default: "[]" })
+  requestedPlanCodes!: string[];
+
   @Column({ type: "simple-json", default: "{}" })
   inputSnapshot!: Record<string, unknown>;
 
   @Column({ default: "manual" })
   source!: string;
+
+  @Column({ nullable: true })
+  startedAt?: Date;
+
+  @Column({ nullable: true })
+  finishedAt?: Date;
+
+  @Column({ default: "" })
+  errorCode!: string;
 
   @Column({ default: "" })
   errorMessage!: string;

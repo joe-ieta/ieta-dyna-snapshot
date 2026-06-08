@@ -4,6 +4,7 @@ dist/
 build/
 data/
 logs/
+.codex_tmp/
 .env
 .env.*
 !.env.example

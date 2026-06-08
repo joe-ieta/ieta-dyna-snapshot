@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
+import { CreateProjectDto, UpdateProjectDto } from "./dto/project.dto";
 import { SnapshotService } from "./snapshot.service";
 
 @Controller("v1/projects")
@@ -14,7 +15,7 @@ export class ProjectsController {
 
   @Post()
   @RequirePermissions("snapshot:project:write")
-  create(@Body() payload: any) {
+  create(@Body() payload: CreateProjectDto) {
     return this.service.createProject(payload);
   }
 
@@ -22,5 +23,17 @@ export class ProjectsController {
   @RequirePermissions("snapshot:project:read")
   inputs(@Param("code") code: string) {
     return this.service.getProjectInputs(code);
+  }
+
+  @Get(":id")
+  @RequirePermissions("snapshot:project:read")
+  detail(@Param("id") id: string) {
+    return this.service.getProject(id);
+  }
+
+  @Patch(":id")
+  @RequirePermissions("snapshot:project:write")
+  update(@Param("id") id: string, @Body() payload: UpdateProjectDto) {
+    return this.service.updateProject(id, payload);
   }
 }

@@ -51,7 +51,7 @@ const submit = async () => {
 }
 
 .login-card {
-  width: 380px;
+  width: min(380px, calc(100vw - 32px));
   border-radius: 8px;
 }
 

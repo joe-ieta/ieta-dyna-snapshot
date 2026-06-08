@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { Logger, UnprocessableEntityException, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -34,6 +34,15 @@ async function bootstrap() {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
       errorHttpStatusCode: 422,
+      exceptionFactory: (errors) =>
+        new UnprocessableEntityException({
+          code: "INPUT_VALIDATION_FAILED",
+          message: "Request validation failed",
+          details: errors.map((error) => ({
+            field: error.property,
+            constraints: error.constraints,
+          })),
+        }),
     }),
   );
 

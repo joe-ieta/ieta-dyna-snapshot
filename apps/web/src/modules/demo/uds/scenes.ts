@@ -1,0 +1,303 @@
+import type { UdsScene } from "./types";
+
+export const localMonitorScene: UdsScene = {
+  schemaVersion: "uds-demo-v1",
+  id: "local-monitor-overview",
+  title: "本机资源监测",
+  subtitle: "模拟主机性能、磁盘容量与文件系统风险的轻量业务系统",
+  domain: "local-monitor",
+  dataNotice: "演示数据由 UDS 场景内置生成，不读取真实本机资源。",
+  filters: [
+    {
+      id: "host",
+      label: "主机",
+      dataset: "hostMetrics",
+      field: "hostId",
+      type: "select",
+      defaultValue: "hs-node-01",
+      options: [
+        { label: "HS-NODE-01", value: "hs-node-01" },
+        { label: "HS-NODE-02", value: "hs-node-02" },
+        { label: "HS-DB-01", value: "hs-db-01" },
+      ],
+    },
+  ],
+  datasets: [
+    {
+      id: "hostMetrics",
+      title: "主机性能时序",
+      fields: [
+        { name: "hostId", label: "主机", type: "category", role: "dimension" },
+        { name: "time", label: "时间", type: "category", role: "dimension" },
+        { name: "cpu", label: "CPU 使用率", type: "number", unit: "%", role: "measure" },
+        { name: "memory", label: "内存使用率", type: "number", unit: "%", role: "measure" },
+        { name: "ioWait", label: "IO 等待", type: "number", unit: "%", role: "measure" },
+      ],
+      rows: [
+        { hostId: "hs-node-01", time: "09:00", cpu: 42, memory: 61, ioWait: 8 },
+        { hostId: "hs-node-01", time: "10:00", cpu: 58, memory: 64, ioWait: 10 },
+        { hostId: "hs-node-01", time: "11:00", cpu: 71, memory: 70, ioWait: 15 },
+        { hostId: "hs-node-01", time: "12:00", cpu: 64, memory: 73, ioWait: 13 },
+        { hostId: "hs-node-02", time: "09:00", cpu: 28, memory: 45, ioWait: 5 },
+        { hostId: "hs-node-02", time: "10:00", cpu: 32, memory: 47, ioWait: 6 },
+        { hostId: "hs-node-02", time: "11:00", cpu: 38, memory: 49, ioWait: 7 },
+        { hostId: "hs-node-02", time: "12:00", cpu: 35, memory: 51, ioWait: 5 },
+        { hostId: "hs-db-01", time: "09:00", cpu: 55, memory: 78, ioWait: 18 },
+        { hostId: "hs-db-01", time: "10:00", cpu: 68, memory: 82, ioWait: 24 },
+        { hostId: "hs-db-01", time: "11:00", cpu: 74, memory: 84, ioWait: 27 },
+        { hostId: "hs-db-01", time: "12:00", cpu: 69, memory: 83, ioWait: 22 },
+      ],
+    },
+    {
+      id: "diskUsage",
+      title: "磁盘容量",
+      primaryKey: "diskId",
+      fields: [
+        { name: "hostId", label: "主机", type: "category", role: "dimension" },
+        { name: "diskId", label: "分区", type: "string", role: "dimension" },
+        { name: "mount", label: "挂载点", type: "string", role: "dimension" },
+        { name: "usedGb", label: "已用容量", type: "number", unit: "GB", role: "measure" },
+        { name: "totalGb", label: "总容量", type: "number", unit: "GB", role: "measure" },
+        { name: "usageRate", label: "使用率", type: "number", unit: "%", role: "measure" },
+        { name: "risk", label: "风险", type: "category", role: "status" },
+      ],
+      rows: [
+        { hostId: "hs-node-01", diskId: "disk-c", mount: "C:", usedGb: 138, totalGb: 256, usageRate: 54, risk: "正常" },
+        { hostId: "hs-node-01", diskId: "disk-d", mount: "D:", usedGb: 812, totalGb: 1024, usageRate: 79, risk: "关注" },
+        { hostId: "hs-node-01", diskId: "disk-log", mount: "logs", usedGb: 438, totalGb: 512, usageRate: 86, risk: "预警" },
+        { hostId: "hs-node-02", diskId: "disk-c", mount: "C:", usedGb: 96, totalGb: 256, usageRate: 38, risk: "正常" },
+        { hostId: "hs-node-02", diskId: "disk-data", mount: "data", usedGb: 512, totalGb: 1024, usageRate: 50, risk: "正常" },
+        { hostId: "hs-db-01", diskId: "disk-db", mount: "db", usedGb: 1430, totalGb: 2048, usageRate: 70, risk: "关注" },
+        { hostId: "hs-db-01", diskId: "disk-wal", mount: "wal", usedGb: 465, totalGb: 512, usageRate: 91, risk: "高危" },
+      ],
+    },
+  ],
+  views: [
+    {
+      id: "host-kpis",
+      title: "核心状态",
+      type: "metrics",
+      span: 4,
+      dataTestId: "uds-local-kpis",
+      binding: {
+        metrics: [
+          { id: "cpu", label: "CPU 峰值", dataset: "hostMetrics", field: "cpu", aggregate: "max", unit: "%", description: "当前筛选主机" },
+          { id: "memory", label: "平均内存", dataset: "hostMetrics", field: "memory", aggregate: "avg", unit: "%", precision: 1 },
+          { id: "io", label: "IO 等待峰值", dataset: "hostMetrics", field: "ioWait", aggregate: "max", unit: "%" },
+          { id: "disk", label: "高风险分区", dataset: "diskUsage", field: "diskId", aggregate: "count", unit: "个" },
+        ],
+      },
+    },
+    {
+      id: "host-trend",
+      title: "性能趋势",
+      type: "chart",
+      span: 2,
+      dataTestId: "chart-local-host-trend",
+      binding: {
+        dataset: "hostMetrics",
+        kind: "line",
+        dimension: "time",
+        measures: ["cpu", "memory", "ioWait"],
+        aggregate: "avg",
+      },
+    },
+    {
+      id: "disk-tree",
+      title: "磁盘占用结构",
+      type: "chart",
+      span: 2,
+      dataTestId: "chart-local-disk-tree",
+      binding: {
+        dataset: "diskUsage",
+        kind: "treemap",
+        dimension: "mount",
+        measures: ["usedGb"],
+      },
+    },
+    {
+      id: "disk-table",
+      title: "分区风险清单",
+      type: "table",
+      span: 4,
+      dataTestId: "table-local-disk-usage",
+      binding: {
+        dataset: "diskUsage",
+        rowKey: "diskId",
+        columns: [
+          { field: "mount", label: "挂载点" },
+          { field: "usedGb", label: "已用 GB", format: "number" },
+          { field: "totalGb", label: "总容量 GB", format: "number" },
+          { field: "usageRate", label: "使用率", format: "number" },
+          { field: "risk", label: "风险", format: "status" },
+        ],
+      },
+      interactions: [
+        {
+          event: "rowClick",
+          action: { type: "navigate", route: "/demo/local-monitor/disk/{hostId}/{diskId}" },
+        },
+      ],
+    },
+  ],
+};
+
+export const smartHealthScene: UdsScene = {
+  schemaVersion: "uds-demo-v1",
+  id: "smart-health-overview",
+  title: "海上市智慧医疗资源大屏",
+  subtitle: "模拟超大城市医疗设施、医务人员、急救站点与规划预测",
+  domain: "smart-health",
+  dataNotice: "海上市为虚构城市，指标关系参考超大城市医疗资源结构后编造。",
+  filters: [
+    {
+      id: "district",
+      label: "行政区",
+      dataset: "districtResources",
+      field: "district",
+      type: "select",
+      defaultValue: "all",
+      options: [
+        { label: "全市", value: "all" },
+        { label: "浦江中区", value: "浦江中区" },
+        { label: "海湾新区", value: "海湾新区" },
+        { label: "虹港区", value: "虹港区" },
+        { label: "松泽区", value: "松泽区" },
+      ],
+    },
+  ],
+  datasets: [
+    {
+      id: "districtResources",
+      title: "区级医疗资源",
+      primaryKey: "district",
+      fields: [
+        { name: "district", label: "行政区", type: "category", role: "dimension" },
+        { name: "population", label: "常住人口", type: "number", unit: "万人", role: "measure" },
+        { name: "hospitals", label: "医疗机构", type: "number", unit: "家", role: "measure" },
+        { name: "beds", label: "床位", type: "number", unit: "张", role: "measure" },
+        { name: "doctors", label: "执业医师", type: "number", unit: "人", role: "measure" },
+        { name: "nurses", label: "注册护士", type: "number", unit: "人", role: "measure" },
+        { name: "elderRate", label: "老龄化率", type: "number", unit: "%", role: "measure" },
+        { name: "pressure", label: "供需压力", type: "category", role: "status" },
+      ],
+      rows: [
+        { district: "浦江中区", population: 382, hospitals: 154, beds: 25500, doctors: 15800, nurses: 23100, elderRate: 22.4, pressure: "高负载" },
+        { district: "海湾新区", population: 318, hospitals: 116, beds: 18400, doctors: 10200, nurses: 16900, elderRate: 17.8, pressure: "成长型" },
+        { district: "虹港区", population: 246, hospitals: 98, beds: 14600, doctors: 9200, nurses: 13100, elderRate: 24.1, pressure: "高负载" },
+        { district: "松泽区", population: 214, hospitals: 74, beds: 10200, doctors: 6100, nurses: 9100, elderRate: 19.3, pressure: "补短板" },
+      ],
+    },
+    {
+      id: "facilityPlans",
+      title: "规划项目",
+      fields: [
+        { name: "district", label: "行政区", type: "category", role: "dimension" },
+        { name: "project", label: "规划项目", type: "string", role: "dimension" },
+        { name: "newBeds", label: "新增床位", type: "number", unit: "张", role: "measure" },
+        { name: "newStaff", label: "新增医务人员", type: "number", unit: "人", role: "measure" },
+        { name: "coverageGain", label: "覆盖提升", type: "number", unit: "%", role: "measure" },
+        { name: "stage", label: "阶段", type: "category", role: "status" },
+      ],
+      rows: [
+        { district: "浦江中区", project: "老年医学中心扩容", newBeds: 1200, newStaff: 680, coverageGain: 4.2, stage: "论证" },
+        { district: "海湾新区", project: "东部综合医院二期", newBeds: 2600, newStaff: 1380, coverageGain: 9.8, stage: "建设" },
+        { district: "虹港区", project: "急诊协同中心", newBeds: 860, newStaff: 420, coverageGain: 5.7, stage: "试运行" },
+        { district: "松泽区", project: "社区诊疗网络加密", newBeds: 740, newStaff: 560, coverageGain: 8.1, stage: "规划" },
+      ],
+    },
+  ],
+  views: [
+    {
+      id: "health-kpis",
+      title: "全局资源",
+      type: "metrics",
+      span: 4,
+      dataTestId: "uds-health-kpis",
+      binding: {
+        metrics: [
+          { id: "population", label: "服务人口", dataset: "districtResources", field: "population", aggregate: "sum", unit: "万人" },
+          { id: "beds", label: "开放床位", dataset: "districtResources", field: "beds", aggregate: "sum", unit: "张" },
+          { id: "doctors", label: "执业医师", dataset: "districtResources", field: "doctors", aggregate: "sum", unit: "人" },
+          { id: "plans", label: "规划项目", dataset: "facilityPlans", field: "project", aggregate: "count", unit: "项" },
+        ],
+      },
+    },
+    {
+      id: "resource-bars",
+      title: "区级资源对比",
+      type: "chart",
+      span: 2,
+      dataTestId: "chart-health-district-resource",
+      binding: {
+        dataset: "districtResources",
+        kind: "bar",
+        dimension: "district",
+        measures: ["beds", "doctors", "nurses"],
+        aggregate: "sum",
+      },
+    },
+    {
+      id: "elder-scatter",
+      title: "老龄化与床位压力",
+      type: "chart",
+      span: 2,
+      dataTestId: "chart-health-pressure-scatter",
+      binding: {
+        dataset: "districtResources",
+        kind: "scatter",
+        dimension: "district",
+        measures: ["elderRate", "beds"],
+      },
+    },
+    {
+      id: "district-table",
+      title: "区级资源台账",
+      type: "table",
+      span: 4,
+      dataTestId: "table-health-district-resources",
+      binding: {
+        dataset: "districtResources",
+        rowKey: "district",
+        columns: [
+          { field: "district", label: "行政区", format: "link" },
+          { field: "population", label: "人口(万人)", format: "number" },
+          { field: "hospitals", label: "机构数", format: "number" },
+          { field: "beds", label: "床位", format: "number" },
+          { field: "doctors", label: "医师", format: "number" },
+          { field: "pressure", label: "压力", format: "status" },
+        ],
+      },
+      interactions: [
+        {
+          event: "rowClick",
+          action: { type: "navigate", route: "/demo/smart-health/district/{district}" },
+        },
+      ],
+    },
+    {
+      id: "planning-table",
+      title: "规划项目评估",
+      type: "table",
+      span: 4,
+      dataTestId: "table-health-facility-plans",
+      binding: {
+        dataset: "facilityPlans",
+        rowKey: "project",
+        columns: [
+          { field: "district", label: "行政区" },
+          { field: "project", label: "项目" },
+          { field: "newBeds", label: "新增床位", format: "number" },
+          { field: "newStaff", label: "新增人员", format: "number" },
+          { field: "coverageGain", label: "覆盖提升", format: "number" },
+          { field: "stage", label: "阶段", format: "status" },
+        ],
+      },
+    },
+  ],
+};
+
+export const demoScenes = {
+  localMonitor: localMonitorScene,
+  smartHealth: smartHealthScene,
+};

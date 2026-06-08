@@ -4,6 +4,38 @@ import Login from "@/views/Login.vue";
 
 const routes: RouteRecordRaw[] = [
   {
+    path: "/demo",
+    name: "demo-home",
+    component: () => import("@/modules/demo/views/DemoHome.vue"),
+    meta: { hidden: true, title: "UDS 演示系统" },
+  },
+  {
+    path: "/demo/local-monitor",
+    name: "demo-local-monitor",
+    component: () => import("@/modules/demo/views/LocalMonitorDemo.vue"),
+    meta: { hidden: true, title: "本机资源监测" },
+  },
+  {
+    path: "/demo/local-monitor/disk/:hostId/:diskId",
+    name: "demo-local-monitor-disk",
+    component: () => import("@/modules/demo/views/DemoDetailPlaceholder.vue"),
+    props: { system: "local-monitor" },
+    meta: { hidden: true, title: "磁盘明细" },
+  },
+  {
+    path: "/demo/smart-health",
+    name: "demo-smart-health",
+    component: () => import("@/modules/demo/views/SmartHealthDemo.vue"),
+    meta: { hidden: true, title: "海上市智慧医疗" },
+  },
+  {
+    path: "/demo/smart-health/district/:district",
+    name: "demo-smart-health-district",
+    component: () => import("@/modules/demo/views/DemoDetailPlaceholder.vue"),
+    props: { system: "smart-health" },
+    meta: { hidden: true, title: "区级医疗资源明细" },
+  },
+  {
     path: "/",
     component: MainLayout,
     redirect: "/dashboard",
@@ -24,19 +56,19 @@ const routes: RouteRecordRaw[] = [
         path: "/systems",
         name: "systems",
         component: () => import("@/modules/systems/SystemManager.vue"),
-        meta: { title: "业务系统", icon: "Connection", description: "维护目标系统和浏览器会话" },
+        meta: { title: "业务系统", icon: "Connection", description: "维护目标系统、登录入口和浏览器会话设置" },
       },
       {
         path: "/plans",
         name: "plans",
         component: () => import("@/modules/plans/CapturePlanManager.vue"),
-        meta: { title: "采集计划", icon: "Tickets", description: "维护页面路径、参数和 DOM 选区" },
+        meta: { title: "采集计划", icon: "Tickets", description: "维护页面路径、参数和 DOM 采集规则" },
       },
       {
         path: "/runs",
         name: "runs",
         component: () => import("@/modules/runs/RunManager.vue"),
-        meta: { title: "运行任务", icon: "VideoPlay", description: "触发和追踪自动采集运行" },
+        meta: { title: "运行任务", icon: "VideoPlay", description: "触发并追踪自动采集运行" },
       },
       {
         path: "/assets",
@@ -74,6 +106,10 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+  if (to.path.startsWith("/demo")) {
+    document.title = `${String(to.meta.title || "UDS 演示系统")} - Dyna Snapshot`;
+    return true;
+  }
   const { useAuthStore } = await import("@/stores/auth");
   const authStore = useAuthStore();
   if (to.path === "/login") return true;

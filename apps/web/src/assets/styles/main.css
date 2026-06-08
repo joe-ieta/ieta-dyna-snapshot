@@ -143,6 +143,14 @@ body {
   background: #f5f7fa;
 }
 
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
 .page-title {
   margin: 0 0 6px;
   font-size: 22px;
@@ -150,7 +158,7 @@ body {
 }
 
 .page-subtitle {
-  margin: 0 0 20px;
+  margin: 0;
   color: #606266;
 }
 
@@ -159,10 +167,36 @@ body {
   border-radius: 8px;
 }
 
+.toolbar-card .el-card__body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-card .el-select,
+.toolbar-card .el-input {
+  max-width: 420px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid.three {
+  grid-template-columns: 1.1fr 1.4fr 160px;
+  align-items: end;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  margin-bottom: 16px;
 }
 
 .metric-card {
@@ -173,6 +207,36 @@ body {
   font-size: 28px;
   font-weight: 700;
   margin-top: 10px;
+}
+
+.panel-title {
+  margin: 22px 0 12px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.json-preview {
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  margin: 0;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #303133;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.asset-preview {
+  margin-top: 16px;
+}
+
+.asset-preview img {
+  max-width: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
 }
 
 .fade-slide-enter-active,
@@ -207,7 +271,13 @@ body.dark {
 }
 
 @media (max-width: 960px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .page-heading {
+    flex-direction: column;
+  }
+
+  .metric-grid,
+  .form-grid.two,
+  .form-grid.three {
+    grid-template-columns: 1fr;
   }
 }

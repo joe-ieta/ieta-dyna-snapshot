@@ -4,12 +4,14 @@ import { TypeOrmModule, type TypeOrmModuleOptions } from "@nestjs/typeorm";
 import { mkdirSync } from "fs";
 import { dirname, resolve } from "path";
 import { AssetEntity } from "./entities/asset.entity";
+import { AssetSequenceEntity } from "./entities/asset-sequence.entity";
 import { CapturePlanEntity } from "./entities/capture-plan.entity";
 import { CaptureRunEntity } from "./entities/capture-run.entity";
 import { ExternalSystemEntity } from "./entities/external-system.entity";
 import { PermissionEntity } from "./entities/permission.entity";
 import { ProjectEntity } from "./entities/project.entity";
 import { RoleEntity } from "./entities/role.entity";
+import { RunStepEntity } from "./entities/run-step.entity";
 import { UserEntity } from "./entities/user.entity";
 import { SeedService } from "./seed.service";
 
@@ -22,6 +24,8 @@ const entities = [
   CapturePlanEntity,
   CaptureRunEntity,
   AssetEntity,
+  RunStepEntity,
+  AssetSequenceEntity,
 ];
 
 @Module({
