@@ -10,6 +10,7 @@ export type DomainErrorCode =
   | "SESSION_EXPIRED"
   | "CAPTURE_FAILED"
   | "ASSET_NOT_FOUND"
+  | "ASSET_ACCESS_DENIED"
   | "ASSET_WRITE_FAILED";
 
 export class DomainError extends HttpException {

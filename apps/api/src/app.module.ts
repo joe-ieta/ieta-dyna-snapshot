@@ -7,6 +7,7 @@ import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { HealthModule } from "./modules/health/health.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
 import { SecurityModule } from "./modules/security/security.module";
+import { ToolsModule } from "./modules/tools/tools.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SecurityModule } from "./modules/security/security.module";
     SecurityModule,
     HealthModule,
     ProjectsModule,
+    ToolsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

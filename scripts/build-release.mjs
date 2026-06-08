@@ -136,8 +136,6 @@ function run(command, commandArgs, cwd) {
 
 function detectPnpmExecutable() {
   if (process.platform !== "win32") return "pnpm";
-  const besideNode = join(dirname(process.execPath), "pnpm.cmd");
-  if (existsSync(besideNode)) return besideNode;
   return "pnpm.cmd";
 }
 
@@ -191,6 +189,11 @@ async function writeDocumentation() {
   await writeFile(join(releaseRoot, "README.md"), releaseReadme(), "utf8");
   await writeFile(join(releaseRoot, "docs", "安装使用手册.md"), installManual(), "utf8");
   await writeFile(join(releaseRoot, "docs", "测试文档.md"), testManual(), "utf8");
+  await cp(join(repoRoot, "docs", "tools-render-url-api.md"), join(releaseRoot, "docs", "tools-render-url-api.md"));
+  await cp(
+    join(repoRoot, "docs", "tools-render-url-development.md"),
+    join(releaseRoot, "docs", "tools-render-url-development.md"),
+  );
 }
 
 async function writeManifest() {
