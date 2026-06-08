@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "path";
 import { type Page } from "playwright";
+import { setTimeout as sleep } from "timers/promises";
 import { DataSource, In, Repository } from "typeorm";
 import { DomainError } from "../../common/errors/domain-error";
 import { AssetEntity } from "../../database/entities/asset.entity";
@@ -30,6 +31,13 @@ type CaptureStep = {
   title?: string;
   outputRef?: string;
   waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+  retry?: {
+    attempts?: number;
+    delayMs?: number;
+    backoffMs?: number;
+  };
+  retryAttempts?: number;
+  retryDelayMs?: number;
 };
 
 type TablePayload = {
@@ -120,11 +128,30 @@ export class CaptureWorkerService {
       if (!stepRecord) continue;
 
       await this.markStepRunning(stepRecord.id);
+      const retryPolicy = this.resolveRetryPolicy(step);
+      let attempt = 0;
       try {
-        await this.executeStep(project, system, plan, run, stepRecord, step, page);
-        await this.markStepSucceeded(stepRecord.id, { url: page.url() });
+        while (true) {
+          try {
+            attempt += 1;
+            await this.executeStep(project, system, plan, run, stepRecord, step, page);
+            await this.markStepSucceeded(stepRecord.id, {
+              url: page.url(),
+              attempts: attempt,
+              retryPolicy,
+            });
+            break;
+          } catch (error) {
+            if (attempt > retryPolicy.attempts) throw error;
+            await sleep(retryPolicy.delayMs + Math.max(0, attempt - 1) * retryPolicy.backoffMs);
+          }
+        }
       } catch (error) {
-        await this.markStepFailed(stepRecord.id, error, { url: page.url() });
+        const diagnostics = await this.collectFailureDiagnostics(project, plan, run, stepRecord, step, page, error, {
+          attempts: attempt,
+          retryPolicy,
+        });
+        await this.markStepFailed(stepRecord.id, error, diagnostics);
         throw error;
       }
     }
@@ -148,6 +175,11 @@ export class CaptureWorkerService {
         return;
       case "fill":
         await page.fill(this.requireSelector(step), this.resolveInputValue(step, run.inputSnapshot), {
+          timeout: step.timeoutMs || 30000,
+        });
+        return;
+      case "selectOption":
+        await page.selectOption(this.requireSelector(step), this.resolveInputValue(step, run.inputSnapshot), {
           timeout: step.timeoutMs || 30000,
         });
         return;
@@ -212,7 +244,7 @@ export class CaptureWorkerService {
         contentHash: this.hashContent(content),
         sourceUrl: page.url(),
         selectorSnapshot: step.selector ? { selector: step.selector } : {},
-        parameterSnapshot: this.extractParameterSnapshot(step, run.inputSnapshot),
+        parameterSnapshot: this.maskParameterSnapshot(this.extractParameterSnapshot(step, run.inputSnapshot), plan.inputSchema),
         metadata: { outputRef: step.outputRef || "", relativePath },
       }),
     );
@@ -272,10 +304,116 @@ export class CaptureWorkerService {
         contentHash: this.hashContent(content),
         sourceUrl: page.url(),
         selectorSnapshot: step.selector ? { selector: step.selector } : {},
-        parameterSnapshot: this.extractParameterSnapshot(step, run.inputSnapshot),
+        parameterSnapshot: this.maskParameterSnapshot(this.extractParameterSnapshot(step, run.inputSnapshot), plan.inputSchema),
         metadata: { outputRef: step.outputRef || "", format: extension, relativePath },
       }),
     );
+  }
+
+  private async collectFailureDiagnostics(
+    project: ProjectEntity,
+    plan: CapturePlanEntity,
+    run: CaptureRunEntity,
+    stepRecord: RunStepEntity,
+    step: CaptureStep,
+    page: Page,
+    error: unknown,
+    diagnostics: Record<string, unknown>,
+  ) {
+    const normalized = this.normalizeError(error);
+    const result: Record<string, unknown> = {
+      ...diagnostics,
+      url: page.url(),
+      errorCode: normalized.code,
+      errorMessage: this.maskSensitiveText(normalized.message, run.inputSnapshot, plan.inputSchema),
+    };
+
+    if (step.selector) {
+      result.selector = step.selector;
+      result.selectorDiagnostics = await this.selectorDiagnostics(page, step.selector);
+    }
+
+    const screenshot = await this.saveFailureScreenshotAsset(project, plan, run, stepRecord, step, page);
+    if (screenshot) {
+      result.failureScreenshot = screenshot;
+    }
+
+    return result;
+  }
+
+  private async selectorDiagnostics(page: Page, selector: string) {
+    try {
+      const locator = page.locator(selector);
+      const count = await locator.count();
+      const samples = await locator.evaluateAll((elements) =>
+        elements.slice(0, 5).map((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return {
+            tagName: element.tagName.toLowerCase(),
+            text: (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 160),
+            visible: rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none",
+            rect: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+          };
+        }),
+      );
+      return { count, samples };
+    } catch (error) {
+      return {
+        count: 0,
+        selectorError: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private async saveFailureScreenshotAsset(
+    project: ProjectEntity,
+    plan: CapturePlanEntity,
+    run: CaptureRunEntity,
+    stepRecord: RunStepEntity,
+    step: CaptureStep,
+    page: Page,
+  ) {
+    try {
+      const content = await page.screenshot({ fullPage: true, type: "png" });
+      const fileName = `${stepRecord.stepId}-failure.png`;
+      const relativePath = this.assetRelativePath(run.id, fileName);
+      const absolutePath = await this.writeAssetFile(project.assetRoot, relativePath, content);
+      const assetCode = await this.allocateAssetCode(project.id, project.code, "image");
+      await this.assets.save(
+        this.assets.create({
+          assetCode,
+          projectId: project.id,
+          runId: run.id,
+          planId: plan.id,
+          stepId: stepRecord.stepId,
+          type: "image",
+          title: `Failure ${step.title || stepRecord.stepName || stepRecord.stepId}`,
+          filePath: absolutePath,
+          contentType: "image/png",
+          contentHash: this.hashContent(content),
+          sourceUrl: page.url(),
+          selectorSnapshot: step.selector ? { selector: step.selector } : {},
+          parameterSnapshot: this.maskParameterSnapshot(this.extractParameterSnapshot(step, run.inputSnapshot), plan.inputSchema),
+          metadata: {
+            diagnostic: true,
+            reason: "step_failure",
+            relativePath,
+          },
+        }),
+      );
+      return { assetCode, filePath: absolutePath, relativePath };
+    } catch (error) {
+      return {
+        failed: true,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   private async markRunRunning(runId: string) {
@@ -298,12 +436,13 @@ export class CaptureWorkerService {
   }
 
   private async markRunFailed(runId: string, error: unknown) {
+    const run = await this.runs.findOneByOrFail({ id: runId });
     const normalized = this.normalizeError(error);
     await this.runs.update(runId, {
       status: "failed",
       finishedAt: new Date(),
       errorCode: normalized.code,
-      errorMessage: normalized.message,
+      errorMessage: this.maskSensitiveText(normalized.message, run.inputSnapshot),
     });
     return this.runs.findOneByOrFail({ id: runId });
   }
@@ -331,7 +470,7 @@ export class CaptureWorkerService {
     step.status = "failed";
     step.finishedAt = new Date();
     step.errorCode = normalized.code;
-    step.message = normalized.message;
+    step.message = this.maskSensitiveText(normalized.message);
     step.diagnostics = diagnostics;
     await this.runSteps.save(step);
   }
@@ -397,6 +536,57 @@ export class CaptureWorkerService {
     return { [key]: parameters[key] };
   }
 
+  private maskParameterSnapshot(snapshot: Record<string, unknown>, inputSchema: unknown) {
+    const secureKeys = this.secureParameterNames(inputSchema);
+    return Object.fromEntries(
+      Object.entries(snapshot).map(([key, value]) => [
+        key,
+        secureKeys.has(key) || this.isSensitiveKey(key) ? "***" : value,
+      ]),
+    );
+  }
+
+  private maskSensitiveText(text: string, parameters?: Record<string, unknown>, inputSchema?: unknown) {
+    let masked = text;
+    const secureKeys = this.secureParameterNames(inputSchema);
+    for (const [key, value] of Object.entries(parameters || {})) {
+      if (!this.isSensitiveKey(key) && !secureKeys.has(key)) continue;
+      if (typeof value !== "string" || !value) continue;
+      masked = masked.split(value).join("***");
+    }
+    return masked;
+  }
+
+  private secureParameterNames(inputSchema: unknown) {
+    const secureKeys = new Set<string>();
+    if (!Array.isArray(inputSchema)) return secureKeys;
+    for (const item of inputSchema) {
+      const parameter = item as { name?: unknown; secure?: unknown; type?: unknown };
+      if (
+        typeof parameter.name === "string"
+        && (parameter.secure === true || String(parameter.type || "").toLowerCase() === "password")
+      ) {
+        secureKeys.add(parameter.name);
+      }
+    }
+    return secureKeys;
+  }
+
+  private isSensitiveKey(key: string) {
+    return /password|passwd|pwd|token|secret|credential|api[_-]?key/i.test(key);
+  }
+
+  private resolveRetryPolicy(step: CaptureStep) {
+    const attempts = Number(step.retry?.attempts ?? step.retryAttempts ?? 0);
+    const delayMs = Number(step.retry?.delayMs ?? step.retryDelayMs ?? 250);
+    const backoffMs = Number(step.retry?.backoffMs ?? 0);
+    return {
+      attempts: Number.isFinite(attempts) ? Math.max(0, Math.min(5, Math.floor(attempts))) : 0,
+      delayMs: Number.isFinite(delayMs) ? Math.max(0, Math.min(10000, Math.floor(delayMs))) : 250,
+      backoffMs: Number.isFinite(backoffMs) ? Math.max(0, Math.min(10000, Math.floor(backoffMs))) : 0,
+    };
+  }
+
   private hashContent(content: Buffer) {
     return createHash("sha256").update(content).digest("hex");
   }
@@ -427,6 +617,7 @@ export class CaptureWorkerService {
     return [
       "goto",
       "fill",
+      "selectOption",
       "click",
       "waitForSelector",
       "screenshotPage",

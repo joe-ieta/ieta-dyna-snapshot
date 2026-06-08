@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import { DomainError } from "../../common/errors/domain-error";
 import { AssetEntity } from "../../database/entities/asset.entity";
 import { AssetSequenceEntity } from "../../database/entities/asset-sequence.entity";
@@ -94,7 +94,7 @@ export class SnapshotService {
     }
     return {
       projectCode: project.code,
-      projectDefaults: project.defaultParameters,
+      projectDefaults: this.maskParameterMap(project.defaultParameters || {}, plans),
       parameters: Array.from(merged.values()),
       plans: plans.map((plan) => ({
         code: plan.code,
@@ -204,11 +204,12 @@ export class SnapshotService {
     return this.plans.save(plan);
   }
 
-  listRuns(projectId?: string) {
-    return this.runs.find({
+  async listRuns(projectId?: string) {
+    const runs = await this.runs.find({
       where: projectId ? { projectId } : {},
       order: { createdAt: "DESC" },
     });
+    return this.maskRuns(runs);
   }
 
   async triggerRun(payload: TriggerCaptureRunDto) {
@@ -283,7 +284,8 @@ export class SnapshotService {
       return run;
     });
 
-    return this.captureWorker.executeRun(run.id);
+    const completedRun = await this.captureWorker.executeRun(run.id);
+    return this.maskRun(completedRun, selectedPlans);
   }
 
   async listRunSteps(runId: string) {
@@ -295,7 +297,7 @@ export class SnapshotService {
     if (!run) {
       throw new DomainError("CAPTURE_FAILED", `Capture run not found: ${id}`, HttpStatus.NOT_FOUND);
     }
-    return run;
+    return this.maskRun(run, await this.plansForRun(run));
   }
 
   listAssets(runId?: string) {
@@ -326,5 +328,51 @@ export class SnapshotService {
       await sequenceRepo.save(sequence);
       return `${projectCode}-${assetType.toUpperCase()}-${dateKey}-${String(value).padStart(4, "0")}`;
     });
+  }
+
+  private async maskRuns(runs: CaptureRunEntity[]) {
+    const planIds = Array.from(new Set(runs.flatMap((run) => run.requestedPlanIds || [])));
+    const plans = planIds.length > 0 ? await this.plans.find({ where: { id: In(planIds) } }) : [];
+    return runs.map((run) =>
+      this.maskRun(run, plans.filter((plan) => (run.requestedPlanIds || []).includes(plan.id))),
+    );
+  }
+
+  private async plansForRun(run: CaptureRunEntity) {
+    const planIds = run.requestedPlanIds || [];
+    return planIds.length > 0 ? this.plans.find({ where: { id: In(planIds) } }) : [];
+  }
+
+  private maskRun(run: CaptureRunEntity, plans: CapturePlanEntity[]) {
+    return {
+      ...run,
+      inputSnapshot: this.maskParameterMap(run.inputSnapshot || {}, plans),
+    };
+  }
+
+  private maskParameterMap(parameters: Record<string, unknown>, plans: CapturePlanEntity[]) {
+    const secureKeys = new Set<string>();
+    for (const plan of plans) {
+      for (const item of plan.inputSchema || []) {
+        const parameter = item as { name?: unknown; secure?: unknown; type?: unknown };
+        if (
+          typeof parameter.name === "string"
+          && (parameter.secure === true || String(parameter.type || "").toLowerCase() === "password")
+        ) {
+          secureKeys.add(parameter.name);
+        }
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(parameters).map(([key, value]) => [
+        key,
+        secureKeys.has(key) || this.isSensitiveKey(key) ? "***" : value,
+      ]),
+    );
+  }
+
+  private isSensitiveKey(key: string) {
+    return /password|passwd|pwd|token|secret|credential|api[_-]?key/i.test(key);
   }
 }

@@ -25,6 +25,8 @@ Platform-sensitive implementation rules:
 - Browser session reuse after manual login.
 - Project-based capture plans.
 - DOM-element screenshot targets.
+- DOM marking with selector candidates and generated plan JSON snippets.
+- Input parameter scanning for form fields and select controls.
 - Structured data capture.
 - Unique asset storage and metadata management.
 - External HTTP APIs for triggering capture runs by project code.
@@ -41,6 +43,7 @@ Read the documents in this order:
 4. [Application Framework Baseline](docs/application-framework.md)
 5. [Project Review and Development Recommendations](docs/project-review-and-development-recommendations.md)
 6. [Development Workflow](docs/development-workflow.md)
+7. [External API Guide](docs/external-api-guide.md)
 
 ## Application Framework
 
@@ -82,8 +85,21 @@ Browser session reuse:
 - Configure `sessionPolicy.loginCheck` for systems that require login validation.
 - Automatic runs reuse `data/browser-profiles/{projectCode}/{systemCode}`.
 
+DOM marking and parameter scanning:
+
+- Open the Business Systems page and choose `DOM 标记`.
+- Start marking, then click target elements in the launched business-system browser.
+- Read the marked elements back in the console to get selector candidates plus suggested `screenshotElement`, `extractTable`, `click`, `fill`, or `selectOption` steps.
+- Use `扫描输入项` to discover visible `input`, `textarea`, `select`, and `contenteditable` controls and generate input schema snippets.
+
 Linux ARM hosts can use a system Chromium when needed:
 
 ```bash
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium pnpm dev
 ```
+
+External API exposure:
+
+- Keep `API_HOST=127.0.0.1` for local-only use.
+- For non-local binding, set a strong `JWT_SECRET` and `SNAPSHOT_API_TOKEN`.
+- External callers can trigger runs with `X-API-Token`; see [External API Guide](docs/external-api-guide.md).

@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @ieta-dyna-snapshot/api dev",
     "dev:web": "pnpm --filter @ieta-dyna-snapshot/web dev",
     "browser:install": "pnpm --filter @ieta-dyna-snapshot/api browser:install",
+    "smoke:security": "pnpm --filter @ieta-dyna-snapshot/api smoke:security",
     "build": "pnpm -r build",
     "type-check": "pnpm -r type-check"
   },

@@ -66,4 +66,44 @@ export class ExternalSystemsController {
     const project = await this.service.getProject(system.projectId);
     return this.browserSessions.clearSession(project, system);
   }
+
+  @Get(":id/marking")
+  @RequirePermissions("snapshot:project:read")
+  async markingStatus(@Param("id") id: string) {
+    const system = await this.service.getSystem(id);
+    const project = await this.service.getProject(system.projectId);
+    return this.browserSessions.getDomMarkingStatus(project, system);
+  }
+
+  @Post(":id/marking/start")
+  @RequirePermissions("snapshot:system:admin")
+  async startMarking(@Param("id") id: string, @Body() payload?: { clear?: boolean }) {
+    const system = await this.service.getSystem(id);
+    const project = await this.service.getProject(system.projectId);
+    return this.browserSessions.startDomMarking(project, system, { clear: !!payload?.clear });
+  }
+
+  @Post(":id/marking/stop")
+  @RequirePermissions("snapshot:system:admin")
+  async stopMarking(@Param("id") id: string) {
+    const system = await this.service.getSystem(id);
+    const project = await this.service.getProject(system.projectId);
+    return this.browserSessions.stopDomMarking(project, system);
+  }
+
+  @Delete(":id/marking/selections")
+  @RequirePermissions("snapshot:system:admin")
+  async clearMarkingSelections(@Param("id") id: string) {
+    const system = await this.service.getSystem(id);
+    const project = await this.service.getProject(system.projectId);
+    return this.browserSessions.clearDomMarkingSelections(project, system);
+  }
+
+  @Post(":id/marking/scan-inputs")
+  @RequirePermissions("snapshot:system:admin")
+  async scanInputParameters(@Param("id") id: string) {
+    const system = await this.service.getSystem(id);
+    const project = await this.service.getProject(system.projectId);
+    return this.browserSessions.scanInputParameters(project, system);
+  }
 }

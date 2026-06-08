@@ -14,6 +14,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.get<number>("API_PORT", 4310);
   const host = config.get<string>("API_HOST", "127.0.0.1");
+  assertSafeExposure(config, host);
 
   app.use(helmet());
   app.use(compression());
@@ -51,6 +52,7 @@ async function bootstrap() {
     .setDescription("Local web snapshot and structured data capture management API")
     .setVersion("0.1.0")
     .addBearerAuth()
+    .addApiKey({ type: "apiKey", in: "header", name: "X-API-Token" }, "ApiToken")
     .build();
   SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, documentConfig), {
     swaggerOptions: { persistAuthorization: true },
@@ -62,3 +64,33 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+function assertSafeExposure(config: ConfigService, host: string) {
+  if (isLocalHost(host)) return;
+
+  const jwtSecret = config.get<string>("JWT_SECRET", "");
+  const apiTokens = [
+    config.get<string>("SNAPSHOT_API_TOKEN", ""),
+    ...config.get<string>("SNAPSHOT_API_TOKENS", "").split(","),
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const hasStrongJwtSecret = jwtSecret.length >= 32 && jwtSecret !== "local-dev-secret";
+  const hasStrongApiToken = apiTokens.some((token) => token.length >= 24);
+  if (hasStrongJwtSecret && hasStrongApiToken) return;
+
+  throw new Error(
+    "Refusing non-local API exposure. Set JWT_SECRET to at least 32 characters and configure SNAPSHOT_API_TOKEN or SNAPSHOT_API_TOKENS with a token of at least 24 characters.",
+  );
+}
+
+function isLocalHost(host: string) {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === "localhost"
+    || normalized === "127.0.0.1"
+    || normalized === "::1"
+    || normalized.startsWith("127.")
+  );
+}

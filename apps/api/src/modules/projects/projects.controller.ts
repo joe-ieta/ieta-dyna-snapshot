@@ -1,9 +1,17 @@
 import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiSecurity } from "@nestjs/swagger";
 import { RequirePermissions } from "../../common/decorators/permissions.decorator";
 import { CreateProjectDto, UpdateProjectDto } from "./dto/project.dto";
 import { SnapshotService } from "./snapshot.service";
 
 @Controller("v1/projects")
+@ApiBearerAuth()
+@ApiSecurity("ApiToken")
+@ApiHeader({
+  name: "X-API-Token",
+  required: false,
+  description: "External automation token. Use this instead of JWT for non-interactive callers.",
+})
 export class ProjectsController {
   constructor(private readonly service: SnapshotService) {}
 
@@ -20,6 +28,8 @@ export class ProjectsController {
   }
 
   @Get(":code/inputs")
+  @ApiOperation({ summary: "Get required input parameters for a project before triggering capture" })
+  @ApiParam({ name: "code", example: "REPORT_DEMO" })
   @RequirePermissions("snapshot:project:read")
   inputs(@Param("code") code: string) {
     return this.service.getProjectInputs(code);

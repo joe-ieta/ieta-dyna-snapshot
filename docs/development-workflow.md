@@ -13,12 +13,18 @@ The project now has:
 - PNG screenshot asset writing.
 - JSON and CSV table asset writing.
 - Asset download and structured content APIs.
+- Browser session reuse with persistent project/system profiles.
+- DOM marking API and Business Systems page marking panel.
+- Input parameter scanning for visible form controls.
+- Step retry policy, selector diagnostics, and failure screenshots.
+- API token support for external callers.
+- Non-local startup safety checks.
 - `pnpm --filter @ieta-dyna-snapshot/api smoke:capture` for real capture smoke verification.
+- `pnpm --filter @ieta-dyna-snapshot/api smoke:security` for API token guard verification.
 
 The next product-critical areas are:
 
-- DOM marking and selector generation UI.
-- Security hardening for non-local exposure.
+- Plan-draft persistence from DOM marking results.
 - More diagnostics and automated tests.
 
 ## 2. Top-Level Constraint
@@ -87,33 +93,57 @@ Session policy example:
 
 Goal: make plan authoring easier after the JSON execution path is stable.
 
-Tasks:
+Implemented scope:
 
-1. Add marking session API.
-2. Inject DOM element picker script.
-3. Highlight hovered DOM elements.
-4. Generate selector candidates.
-5. Save selected screenshot/data targets into plan draft JSON.
-6. Record simple operations.
-7. Detect input labels/placeholders/names.
-8. Convert recorded values into parameters.
-9. Implement deterministic runtime parameter merge.
-10. Mask secure values in logs and responses.
+- Marking session API on business systems:
+  - `GET /api/v1/external-systems/{id}/marking`
+  - `POST /api/v1/external-systems/{id}/marking/start`
+  - `POST /api/v1/external-systems/{id}/marking/stop`
+  - `DELETE /api/v1/external-systems/{id}/marking/selections`
+  - `POST /api/v1/external-systems/{id}/marking/scan-inputs`
+- DOM picker script injected into the interactive Playwright browser session.
+- Hover highlight and click-to-select behavior.
+- Selector candidate generation from test IDs, IDs, names, aria labels, text, and CSS paths.
+- Suggested plan JSON snippets for `screenshotElement`, `extractTable`, `click`, `fill`, and `selectOption`.
+- Visible input detection from `input`, `textarea`, `select`, and `contenteditable`.
+- Secure password fields are detected as secure parameters and do not expose value previews.
+- Business Systems page DOM marking panel for starting/stopping marking, reading selections, scanning inputs, and copying JSON snippets.
+
+Remaining work:
+
+1. Persist marked elements as editable plan drafts instead of copy-only JSON snippets.
+2. Record multi-step user operations beyond element click selection.
+3. Add robust selector validation and alternate-selector retry.
+4. Extend secure-value masking across all run logs and response surfaces.
 
 ## 6. Stage 6: Diagnostics, Security, and Tests
 
 Goal: make the system maintainable for real business pages.
 
-Tasks:
+Implemented scope:
 
-1. Add selector failure diagnostics.
-2. Add failure screenshots.
-3. Add retry policy per step.
-4. Add local fixture integration tests.
-5. Add API token support for non-local exposure.
-6. Refuse non-local host startup unless API token and strong JWT secret are configured.
-7. Remove default password prefill from production builds.
-8. Add external caller guide and Swagger examples.
+- Selector failure diagnostics record selector count, sample nodes, visibility state, text preview, and selector parse errors.
+- Final step failures persist a `*-failure.png` diagnostic screenshot asset.
+- Step-level retry policy:
+  - `retry.attempts`
+  - `retry.delayMs`
+  - `retry.backoffMs`
+  - legacy aliases `retryAttempts` and `retryDelayMs`
+- Secure parameters are masked in asset parameter snapshots and failure diagnostics.
+- `X-API-Token` and `X-Snapshot-API-Token` support for external callers.
+- Non-local API startup is refused unless `JWT_SECRET` and API token settings are strong enough.
+- Production web builds no longer prefill or display the default admin password.
+- Swagger documents the API token scheme and trigger-run request example.
+- `docs/external-api-guide.md` documents external invocation.
+- Capture smoke now covers retry, failure screenshot, selector diagnostics, secure-value masking, screenshot capture, and table extraction.
+- Security smoke covers missing token, invalid token, and valid API token access.
+
+Remaining work:
+
+1. Add richer diagnostics for frames and shadow DOM.
+2. Add structured retry presets at plan level.
+3. Add persistent audit logs for external API token usage.
+4. Add CI wiring for smoke tests on both Windows x64 and Linux ARM64 hosts.
 
 ## 7. Verification Checklist
 
@@ -128,6 +158,12 @@ For capture worker changes, also run:
 
 ```bash
 pnpm --filter @ieta-dyna-snapshot/api smoke:capture
+```
+
+For security guard changes, also run:
+
+```bash
+pnpm --filter @ieta-dyna-snapshot/api smoke:security
 ```
 
 Also verify:

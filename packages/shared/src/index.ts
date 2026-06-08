@@ -22,11 +22,23 @@ export type AssetType = "image" | "table" | "json" | "text" | "html" | "log";
 export type CaptureStepType =
   | "goto"
   | "fill"
+  | "selectOption"
   | "click"
   | "waitForSelector"
   | "screenshotPage"
   | "screenshotElement"
   | "extractTable";
+
+export type DomElementKind =
+  | "container"
+  | "image"
+  | "table"
+  | "input"
+  | "select"
+  | "button"
+  | "link"
+  | "text"
+  | "unknown";
 
 export interface SelectorCandidate {
   type: "css" | "xpath" | "role" | "text" | "testId" | "relative";
@@ -49,6 +61,13 @@ export interface CaptureStepDefinition {
   timeoutMs?: number;
   fullPage?: boolean;
   outputRef?: string;
+  retry?: {
+    attempts?: number;
+    delayMs?: number;
+    backoffMs?: number;
+  };
+  retryAttempts?: number;
+  retryDelayMs?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -85,6 +104,69 @@ export interface ExternalSystemSummary {
   sessionPolicy: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DomElementRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DomElementAttributes {
+  id?: string;
+  name?: string;
+  type?: string;
+  role?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  title?: string;
+  testId?: string;
+  className?: string;
+  href?: string;
+  valuePreview?: string;
+}
+
+export interface DomMarkingSelection {
+  id: string;
+  sequence: number;
+  url: string;
+  pageTitle: string;
+  capturedAt: string;
+  tagName: string;
+  kind: DomElementKind;
+  selector: string;
+  selectorCandidates: SelectorCandidate[];
+  label?: string;
+  text?: string;
+  attributes: DomElementAttributes;
+  rect: DomElementRect;
+  recommendedSteps: CaptureStepDefinition[];
+  recommendedParameters: InputParameterDefinition[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface DomMarkingStatus {
+  projectCode: string;
+  systemCode: string;
+  active: boolean;
+  profilePath: string;
+  currentUrl?: string;
+  startedAt?: string;
+  stoppedAt?: string;
+  lastSelectionAt?: string;
+  selectionCount: number;
+  selections: DomMarkingSelection[];
+}
+
+export interface DomInputScanResult {
+  projectCode: string;
+  systemCode: string;
+  url: string;
+  scannedAt: string;
+  selections: DomMarkingSelection[];
+  parameters: InputParameterDefinition[];
+  fillSteps: CaptureStepDefinition[];
 }
 
 export interface BrowserSessionStatus {

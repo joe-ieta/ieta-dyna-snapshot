@@ -33,6 +33,14 @@ function createFixtureServer() {
       table { border-collapse: collapse; width: 100%; margin-top: 12px; }
       th, td { border: 1px solid #d5dce7; padding: 6px 8px; text-align: left; }
     </style>
+    <script>
+      setTimeout(() => {
+        const marker = document.createElement("div");
+        marker.id = "late-marker";
+        marker.textContent = "Ready";
+        document.body.appendChild(marker);
+      }, 250);
+    </script>
   </head>
   <body>
     <section id="capture">
@@ -103,11 +111,36 @@ async function main() {
       name: "Basic Capture",
       steps: [
         { id: "open", type: "goto", name: "Open fixture" },
+        {
+          id: "wait-late-marker",
+          type: "waitForSelector",
+          name: "Wait for delayed marker",
+          selector: "#late-marker",
+          timeoutMs: 100,
+          retry: { attempts: 5, delayMs: 100 },
+        },
         { id: "fill-keyword", type: "fill", name: "Fill keyword", selector: "#keyword", value: "{{keyword}}" },
         { id: "shot-card", type: "screenshotElement", name: "Capture card", selector: "#capture" },
         { id: "table-metrics", type: "extractTable", name: "Extract metrics", selector: "#metrics" },
       ],
       inputSchema: [{ name: "keyword", label: "Keyword", type: "string", required: true, secure: false }],
+    });
+    await service.createPlan({
+      projectId: project.id,
+      externalSystemId: system.id,
+      code: "FAIL_SELECTOR",
+      name: "Failure Diagnostics",
+      steps: [
+        {
+          id: "missing-card",
+          type: "screenshotElement",
+          name: "Missing card",
+          selector: "#missing-card",
+          timeoutMs: 150,
+          retry: { attempts: 1, delayMs: 50 },
+        },
+      ],
+      inputSchema: [{ name: "secretToken", label: "Secret token", type: "password", required: false, secure: true }],
     });
     await service.createPlan({
       projectId: project.id,
@@ -152,6 +185,35 @@ async function main() {
     if (!assets.some((asset) => asset.contentType === "application/json")) throw new Error("Missing JSON asset");
     if (!assets.some((asset) => asset.contentType === "text/csv")) throw new Error("Missing CSV asset");
     if (summary.tableRows !== 2) throw new Error("Unexpected table extraction row count");
+    const retryStep = steps.find((step) => step.stepId === "wait-late-marker");
+    if (!retryStep?.diagnostics || Number(retryStep.diagnostics.attempts || 0) < 2) {
+      throw new Error("Retry diagnostics were not recorded");
+    }
+
+    const failedSelectorRun = await service.triggerRun({
+      projectCode,
+      planCodes: ["FAIL_SELECTOR"],
+      parameters: { secretToken: "super-secret-value" },
+      source: "api",
+    });
+    const failedSelectorSteps = await service.listRunSteps(failedSelectorRun.id);
+    const failedSelectorAssets = await service.listAssets(failedSelectorRun.id);
+    const failedStep = failedSelectorSteps.find((step) => step.stepId === "missing-card");
+    if (failedSelectorRun.status !== "failed") {
+      throw new Error(`Expected failed selector run, got ${failedSelectorRun.status}`);
+    }
+    if (!failedStep?.diagnostics?.selectorDiagnostics) {
+      throw new Error("Missing selector diagnostics for failed step");
+    }
+    if (!failedStep.diagnostics.failureScreenshot) {
+      throw new Error("Missing failure screenshot diagnostic");
+    }
+    if (!failedSelectorAssets.some((asset) => asset.metadata?.diagnostic === true && asset.contentType === "image/png")) {
+      throw new Error("Missing persisted failure screenshot asset");
+    }
+    if (JSON.stringify(failedStep).includes("super-secret-value")) {
+      throw new Error("Secure parameter leaked into failure diagnostics");
+    }
 
     const lockedRun = await service.triggerRun({
       projectCode,

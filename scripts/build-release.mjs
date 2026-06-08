@@ -165,7 +165,7 @@ async function copyProjectArtifacts() {
   await cp(join(repoRoot, "apps", "web", "dist"), join(releaseRoot, "apps", "web", "dist"), { recursive: true });
   await cp(join(repoRoot, "packages", "shared", "dist"), join(releaseRoot, "packages", "shared", "dist"), { recursive: true });
 
-  await writeJson(join(releaseRoot, "package.json"), releaseRootPackage());
+  await writeJson(join(releaseRoot, "package.json"), releaseRootPackage(await readJson(join(repoRoot, "package.json"))));
   await writeJson(join(releaseRoot, "apps", "api", "package.json"), await readJson(join(repoRoot, "apps", "api", "package.json")));
   await writeJson(join(releaseRoot, "packages", "shared", "package.json"), releaseSharedPackage(await readJson(join(repoRoot, "packages", "shared", "package.json"))));
   await cp(join(repoRoot, "pnpm-lock.yaml"), join(releaseRoot, "pnpm-lock.yaml"));
@@ -233,10 +233,23 @@ async function copyOptional(source, target, warnings, label) {
   }
 }
 
+async function copyPnpmStore(sourceStore, targetStore, warnings) {
+  try {
+    console.log(`复制 pnpm store ${sourceStore} -> ${targetStore}`);
+    await mkdir(targetStore, { recursive: true });
+    for (const child of ["files", "index"]) {
+      const source = join(sourceStore, child);
+      if (existsSync(source)) await cp(source, join(targetStore, child), { recursive: true, force: true });
+    }
+  } catch (error) {
+    warnings.push(`复制 pnpm store ${sourceStore} 失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function installReleaseNodeModules(warnings) {
   const sourceStore = detectPnpmStoreDir();
   if (sourceStore && existsSync(sourceStore)) {
-    await copyOptional(sourceStore, join(releaseRoot, ".pnpm-store", basename(sourceStore)), warnings, `pnpm store ${sourceStore}`);
+    await copyPnpmStore(sourceStore, join(releaseRoot, ".pnpm-store", basename(sourceStore)), warnings);
   } else {
     warnings.push("未能识别当前 pnpm store；将尝试直接安装发布目录生产依赖。");
   }
@@ -256,7 +269,7 @@ function detectPnpmStoreDir() {
   const modulesFile = join(repoRoot, "node_modules", ".modules.yaml");
   if (!existsSync(modulesFile)) return undefined;
   const content = readFileSync(modulesFile, "utf8");
-  const match = content.match(/storeDir:\s*"?([^"\r\n]+)"?/);
+  const match = content.match(/"?storeDir"?:\s*"?([^",\r\n]+)"?/);
   if (!match) return undefined;
   const raw = match[1].trim();
   return process.platform === "win32" ? raw.replace(/\\\\/g, "\\") : raw;
@@ -292,10 +305,11 @@ async function writeJson(file, value) {
   await rm(`${file}.tmp`, { force: true });
 }
 
-function releaseRootPackage() {
+function releaseRootPackage(sourcePackage) {
   return {
+    ...sourcePackage,
     name: "ieta-dyna-snapshot-release",
-    version: "0.1.0",
+    version: sourcePackage.version || "0.1.0",
     private: true,
     packageManager: "pnpm@10.33.0",
     scripts: {
@@ -313,6 +327,7 @@ function releaseRootPackage() {
 
 function releaseSharedPackage(pkg) {
   return {
+    ...pkg,
     name: pkg.name,
     version: pkg.version,
     private: true,
@@ -583,6 +598,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const smokeRoot = join(root, "data", "release-smoke");
+const apiRequire = createRequire(join(root, "apps", "api", "dist", "main.js"));
 
 process.env.NODE_ENV = "production";
 process.env.SQLITE_PATH = join(smokeRoot, "app.db");
@@ -594,10 +610,10 @@ if (!existsSync(join(root, "apps", "api", "dist", "app.module.js"))) {
   process.exit(1);
 }
 
-require("reflect-metadata");
-const { NestFactory } = require("@nestjs/core");
-const { AppModule } = require("../apps/api/dist/app.module.js");
-const { SnapshotService } = require("../apps/api/dist/modules/projects/snapshot.service.js");
+apiRequire("reflect-metadata");
+const { NestFactory } = apiRequire("@nestjs/core");
+const { AppModule } = apiRequire("./app.module.js");
+const { SnapshotService } = apiRequire("./modules/projects/snapshot.service.js");
 
 const fixtureHtml = \`<!doctype html>
 <html><head><meta charset="utf-8"><title>Release Smoke</title>

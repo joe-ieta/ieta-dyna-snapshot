@@ -9,6 +9,7 @@
     "start": "node dist/main.js",
     "browser:install": "playwright install chromium",
     "smoke:capture": "node scripts/smoke-capture.js",
+    "smoke:security": "node scripts/smoke-security.js",
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -4,6 +4,8 @@ import type {
   BrowserSessionStatus,
   CapturePlanSummary,
   CaptureRunSummary,
+  DomInputScanResult,
+  DomMarkingStatus,
   ExternalSystemSummary,
   LoginResponse,
   ProjectInputsResponse,
@@ -118,6 +120,21 @@ export const snapshotApi = {
   },
   clearSystemSession(id: string) {
     return api.delete<unknown, BrowserSessionStatus>(`/v1/external-systems/${id}/session`);
+  },
+  getDomMarkingStatus(id: string) {
+    return api.get<unknown, DomMarkingStatus>(`/v1/external-systems/${id}/marking`);
+  },
+  startDomMarking(id: string, payload?: { clear?: boolean }) {
+    return api.post<unknown, DomMarkingStatus>(`/v1/external-systems/${id}/marking/start`, payload || {});
+  },
+  stopDomMarking(id: string) {
+    return api.post<unknown, DomMarkingStatus>(`/v1/external-systems/${id}/marking/stop`);
+  },
+  clearDomMarkingSelections(id: string) {
+    return api.delete<unknown, DomMarkingStatus>(`/v1/external-systems/${id}/marking/selections`);
+  },
+  scanDomInputs(id: string) {
+    return api.post<unknown, DomInputScanResult>(`/v1/external-systems/${id}/marking/scan-inputs`);
   },
   listPlans(projectId?: string) {
     return api.get<unknown, CapturePlanSummary[]>("/v1/capture-plans", {

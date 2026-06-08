@@ -14,7 +14,7 @@
           登录
         </el-button>
       </el-form>
-      <div class="hint">默认本地管理员：admin / admin123456</div>
+      <div v-if="showLocalHint" class="hint">默认本地管理员：admin / admin123456</div>
     </el-card>
   </div>
 </template>
@@ -28,7 +28,11 @@ import { useAuthStore } from "@/stores/auth";
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
-const form = reactive({ username: "admin", password: "admin123456" });
+const showLocalHint = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEFAULT_LOGIN_HINT === "true";
+const form = reactive({
+  username: showLocalHint ? "admin" : "",
+  password: showLocalHint ? "admin123456" : "",
+});
 
 const submit = async () => {
   try {
