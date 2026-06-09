@@ -23,8 +23,7 @@ if (!args.skipBuild) {
   run("pnpm", ["build"], repoRoot);
 }
 
-await rm(releaseRoot, { recursive: true, force: true });
-await mkdir(releaseRoot, { recursive: true });
+await resetReleaseRoot();
 
 await copyProjectArtifacts();
 await writeRuntimeFiles();
@@ -149,6 +148,42 @@ async function ensureSafeReleaseRoot(target) {
   }
 }
 
+async function resetReleaseRoot() {
+  try {
+    await rm(releaseRoot, { recursive: true, force: true });
+  } catch (error) {
+    if (!isWindowsBusyError(error)) throw error;
+    console.warn(`Release directory is busy; refreshing in place: ${error.message}`);
+    for (const entry of [
+      "apps",
+      "packages",
+      "runtime",
+      "tests",
+      "node_modules",
+      ".pnpm-store",
+      ".npmrc",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "README.md",
+      "release-manifest.json",
+      "start.cmd",
+      "start.sh",
+      "test-release.cmd",
+      "test-release.sh",
+      "install-runtime.ps1",
+      "install-runtime.sh",
+    ]) {
+      await rm(join(releaseRoot, entry), { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+  await mkdir(releaseRoot, { recursive: true });
+}
+
+function isWindowsBusyError(error) {
+  return error && typeof error === "object" && ["EBUSY", "EPERM"].includes(error.code);
+}
+
 async function copyProjectArtifacts() {
   await mkdir(join(releaseRoot, "apps", "api"), { recursive: true });
   await mkdir(join(releaseRoot, "apps", "web"), { recursive: true });
@@ -203,6 +238,8 @@ async function writeManifest() {
     sourceRoot: repoRoot,
     sourceBranch: git(["branch", "--show-current"]),
     sourceCommit: git(["rev-parse", "--short", "HEAD"]),
+    sourceDirty: git(["status", "--porcelain"]).length > 0,
+    sourceStatus: git(["status", "--short"]),
     releaseRoot,
     portableOnly,
     includesCurrentNodeModules: installNodeModules,
@@ -386,10 +423,31 @@ function installRuntimePs1() {
   return `$ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
+$NodeBin = Join-Path $Root "runtime\\node\\windows-x64\\bin"
+if (Test-Path (Join-Path $NodeBin "node.exe")) {
+  $env:PATH = "$NodeBin;$env:PATH"
+}
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw "Node was not found. Install Node 20+ or place Windows x64 Node under runtime\\node\\windows-x64."
+}
+if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+  if (Get-Command corepack -ErrorAction SilentlyContinue) {
+    corepack enable
+  }
+}
+if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+  throw "pnpm was not found. Install pnpm or make sure Node/Corepack is available."
+}
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $Root "runtime\\ms-playwright"
-pnpm install --prod --frozen-lockfile
+foreach ($path in @("node_modules", "apps\\api\\node_modules", "apps\\web\\node_modules", "packages\\shared\\node_modules")) {
+  $target = Join-Path $Root $path
+  if (Test-Path $target) {
+    Remove-Item -LiteralPath $target -Recurse -Force
+  }
+}
+pnpm install --prod --frozen-lockfile --prefer-offline
 pnpm --filter "@ieta-dyna-snapshot/api" exec playwright install chromium
-Write-Host "运行依赖安装完成。启动命令：.\\start.cmd"
+Write-Host "Runtime dependencies installed. Start with .\\start.cmd"
 `;
 }
 
@@ -398,10 +456,29 @@ function installRuntimeSh() {
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$ROOT"
+if [ -x "$ROOT/runtime/node/linux-arm64/bin/node" ]; then
+  export PATH="$ROOT/runtime/node/linux-arm64/bin:$PATH"
+elif [ -x "$ROOT/runtime/node/linux-arm64/node" ]; then
+  export PATH="$ROOT/runtime/node/linux-arm64:$PATH"
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node was not found. Install Node 20+ or place Linux ARM64 Node under runtime/node/linux-arm64." >&2
+  exit 1
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+  if command -v corepack >/dev/null 2>&1; then
+    corepack enable
+  fi
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pnpm was not found. Install pnpm or make sure Node/Corepack is available." >&2
+  exit 1
+fi
 export PLAYWRIGHT_BROWSERS_PATH="$ROOT/runtime/ms-playwright"
-pnpm install --prod --frozen-lockfile
+rm -rf node_modules apps/api/node_modules apps/web/node_modules packages/shared/node_modules
+pnpm install --prod --frozen-lockfile --prefer-offline
 pnpm --filter "@ieta-dyna-snapshot/api" exec playwright install chromium
-echo "运行依赖安装完成。启动命令：./start.sh"
+echo "Runtime dependencies installed. Start with ./start.sh"
 `;
 }
 

@@ -269,7 +269,141 @@ curl -sS -X POST "$API_BASE/api/v1/tools/render-url" \
   -d '{"url":"http://127.0.0.1:4310/api/health","outputType":"jpg","fileNameId":"health-page-jpg"}'
 ```
 
-## 4. Windows 与 Linux ARM64 兼容性检查
+## 4. Java 后台服务调用示例
+
+本示例演示 Java 后台服务如何调用 `render-url` 生成 PNG，并把返回的 `assetUrl` 下载为本地图片文件。
+
+适用前提：
+
+- Java 17 或更高版本。
+- 后台服务可以访问 `ieta-dyna-snapshot` API 地址。
+- 已在服务端 `.env` 中配置 `SNAPSHOT_API_TOKEN`，调用方通过 `X-API-Token` 认证。
+
+Maven 依赖：
+
+```xml
+<dependency>
+  <groupId>com.fasterxml.jackson.core</groupId>
+  <artifactId>jackson-databind</artifactId>
+  <version>2.17.2</version>
+</dependency>
+```
+
+Java 代码片段：
+
+```java
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Map;
+
+public class RenderUrlClient {
+    private final HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final String apiBase;
+    private final String apiToken;
+
+    public RenderUrlClient(String apiBase, String apiToken) {
+        this.apiBase = apiBase;
+        this.apiToken = apiToken;
+    }
+
+    public Path renderUrlToPng(String targetUrl, String fileNameId, Path outputPath)
+            throws IOException, InterruptedException {
+
+        Map<String, Object> requestBody = Map.of(
+                "url", targetUrl,
+                "outputType", "png",
+                "fileNameId", fileNameId,
+                "waitUntil", "domcontentloaded",
+                "timeoutMs", 30000
+        );
+
+        HttpRequest renderRequest = HttpRequest.newBuilder()
+                .uri(URI.create(apiBase + "/api/v1/tools/render-url"))
+                .timeout(Duration.ofSeconds(60))
+                .header("Content-Type", "application/json")
+                .header("X-API-Token", apiToken)
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(requestBody)))
+                .build();
+
+        HttpResponse<String> renderResponse =
+                http.send(renderRequest, HttpResponse.BodyHandlers.ofString());
+
+        JsonNode body = mapper.readTree(renderResponse.body());
+        if (renderResponse.statusCode() != 200 || !body.path("success").asBoolean(false)) {
+            String code = body.path("code").asText("HTTP_" + renderResponse.statusCode());
+            String message = body.path("message").asText(renderResponse.body());
+            throw new IllegalStateException("render-url failed: " + code + " - " + message);
+        }
+
+        String assetUrl = body.path("assetUrl").asText();
+        if (assetUrl.isBlank()) {
+            throw new IllegalStateException("render-url response does not contain assetUrl");
+        }
+
+        HttpRequest downloadRequest = HttpRequest.newBuilder()
+                .uri(URI.create(assetUrl))
+                .timeout(Duration.ofSeconds(60))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> downloadResponse =
+                http.send(downloadRequest, HttpResponse.BodyHandlers.ofByteArray());
+
+        if (downloadResponse.statusCode() != 200) {
+            throw new IllegalStateException("download image failed: HTTP " + downloadResponse.statusCode());
+        }
+
+        Files.createDirectories(outputPath.getParent());
+        Files.write(outputPath, downloadResponse.body());
+        return outputPath;
+    }
+
+    public static void main(String[] args) throws Exception {
+        RenderUrlClient client = new RenderUrlClient(
+                "http://127.0.0.1:4310",
+                System.getenv("SNAPSHOT_API_TOKEN")
+        );
+
+        Path image = client.renderUrlToPng(
+                "http://127.0.0.1:4310/api/health",
+                "health-page-java-demo",
+                Path.of("output/health-page-java-demo.png")
+        );
+
+        System.out.println("image saved: " + image.toAbsolutePath());
+    }
+}
+```
+
+如果目标页面本身需要认证，可以在请求体中增加 `headers` 字段。注意该字段会传给目标页面，不是传给本系统 API：
+
+```java
+Map<String, Object> requestBody = Map.of(
+        "url", "https://example.com/private-report",
+        "outputType", "png",
+        "fileNameId", "private-report-java-demo",
+        "headers", Map.of("Authorization", "Bearer target-page-token"),
+        "waitUntil", "domcontentloaded",
+        "timeoutMs", 30000
+);
+```
+
+调用方只需要直接下载响应中的完整 `assetUrl`。不要删除 `assetUrl` 中的 `expires` 和 `token` 查询参数。
+
+## 5. Windows 与 Linux ARM64 兼容性检查
 
 实现检查：
 
@@ -321,9 +455,9 @@ SNAPSHOT_TOOL_ASSET_URL_TTL_SECONDS=3600
 SNAPSHOT_TOOL_ASSET_URL_SECRET=change-this-to-a-long-random-secret
 ```
 
-## 5. 常见问题
+## 6. 常见问题
 
-### 5.1 返回 `CAPTURE_FAILED`
+### 6.1 返回 `CAPTURE_FAILED`
 
 常见原因：
 
@@ -332,7 +466,7 @@ SNAPSHOT_TOOL_ASSET_URL_SECRET=change-this-to-a-long-random-secret
 - 页面长时间没有达到 `waitUntil` 条件，可尝试 `domcontentloaded` 或增大 `timeoutMs`。
 - Playwright 浏览器未安装或 Linux 缺少浏览器系统依赖。
 
-### 5.2 目标页面需要 Header
+### 6.2 目标页面需要 Header
 
 请求体可以传入 `headers`：
 
@@ -349,6 +483,6 @@ SNAPSHOT_TOOL_ASSET_URL_SECRET=change-this-to-a-long-random-secret
 
 注意：不要把长期有效的敏感凭据写入日志或共享测试集合。
 
-### 5.3 生成文件已存在
+### 6.3 生成文件已存在
 
 同一个 `fileNameId` 和 `outputType` 会生成同名文件；服务会覆盖旧文件。
